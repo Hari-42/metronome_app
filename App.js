@@ -7,6 +7,7 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [beat, setBeat] = useState(1);
   const intervalRef = useRef(null);
+  const holdRef = useRef(null);
 
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
@@ -15,9 +16,31 @@ export default function App() {
     setBpm((prev) => Math.min(300, Math.max(30, prev + delta)));
   };
 
+  const startHold = (delta) => {
+    change(delta);
+    let count = 0;
+    const tick = () => {
+      count += 1;
+      change(delta);
+      // Nach längerem Halten schneller wiederholen
+      const delay = count > 15 ? 30 : count > 6 ? 70 : 150;
+      holdRef.current = setTimeout(tick, delay);
+    };
+    holdRef.current = setTimeout(tick, 400);
+  };
+
+  const stopHold = () => {
+    if (holdRef.current) {
+      clearTimeout(holdRef.current);
+      holdRef.current = null;
+    }
+  };
+
   const toggle = () => {
     setRunning((prev) => !prev);
   };
+
+  useEffect(() => () => stopHold(), []);
 
   useEffect(() => {
     if (running) {
@@ -51,7 +74,11 @@ export default function App() {
           landscape ? styles.controlsLandscape : styles.controlsPortrait,
         ]}
       >
-        <Pressable style={styles.button} onPress={() => change(landscape ? 1 : -1)}>
+        <Pressable
+          style={styles.button}
+          onPressIn={() => startHold(landscape ? 1 : -1)}
+          onPressOut={stopHold}
+        >
           <Text style={styles.buttonText}>{landscape ? '+' : '-'}</Text>
         </Pressable>
 
@@ -60,7 +87,11 @@ export default function App() {
           <Text style={styles.unit}>BPM</Text>
         </View>
 
-        <Pressable style={styles.button} onPress={() => change(landscape ? -1 : 1)}>
+        <Pressable
+          style={styles.button}
+          onPressIn={() => startHold(landscape ? -1 : 1)}
+          onPressOut={stopHold}
+        >
           <Text style={styles.buttonText}>{landscape ? '-' : '+'}</Text>
         </Pressable>
       </View>
