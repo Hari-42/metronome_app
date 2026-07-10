@@ -1,12 +1,15 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Pressable } from 'react-native';
+import { StyleSheet, Text, View, Pressable, useWindowDimensions } from 'react-native';
 
 export default function App() {
   const [bpm, setBpm] = useState(120);
   const [running, setRunning] = useState(false);
   const [beat, setBeat] = useState(1);
   const intervalRef = useRef(null);
+
+  const { width, height } = useWindowDimensions();
+  const landscape = width > height;
 
   const change = (delta) => {
     setBpm((prev) => Math.min(300, Math.max(30, prev + delta)));
@@ -36,15 +39,20 @@ export default function App() {
   }, [running, bpm]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, landscape && styles.containerLandscape]}>
       <Pressable style={styles.display} onPress={toggle}>
         <Text style={styles.beat}>{beat}</Text>
         <Text style={styles.hint}>{running ? 'Tippen zum Stoppen' : 'Tippen zum Starten'}</Text>
       </Pressable>
 
-      <View style={styles.controls}>
-        <Pressable style={styles.button} onPress={() => change(-1)}>
-          <Text style={styles.buttonText}>-</Text>
+      <View
+        style={[
+          styles.controls,
+          landscape ? styles.controlsLandscape : styles.controlsPortrait,
+        ]}
+      >
+        <Pressable style={styles.button} onPress={() => change(landscape ? 1 : -1)}>
+          <Text style={styles.buttonText}>{landscape ? '+' : '-'}</Text>
         </Pressable>
 
         <View style={styles.tempoBox}>
@@ -52,8 +60,8 @@ export default function App() {
           <Text style={styles.unit}>BPM</Text>
         </View>
 
-        <Pressable style={styles.button} onPress={() => change(1)}>
-          <Text style={styles.buttonText}>+</Text>
+        <Pressable style={styles.button} onPress={() => change(landscape ? -1 : 1)}>
+          <Text style={styles.buttonText}>{landscape ? '-' : '+'}</Text>
         </Pressable>
       </View>
 
@@ -66,6 +74,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+    flexDirection: 'column',
+  },
+  containerLandscape: {
+    flexDirection: 'row',
   },
   display: {
     flex: 7,
@@ -83,11 +95,18 @@ const styles = StyleSheet.create({
   },
   controls: {
     flex: 3,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  controlsPortrait: {
+    flexDirection: 'row',
     borderTopWidth: 1,
     borderTopColor: '#eee',
+  },
+  controlsLandscape: {
+    flexDirection: 'column',
+    borderLeftWidth: 1,
+    borderLeftColor: '#eee',
   },
   button: {
     width: 80,
@@ -96,7 +115,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#222',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 20,
+    margin: 20,
   },
   buttonText: {
     color: '#fff',
