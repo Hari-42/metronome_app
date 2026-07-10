@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, Pressable, useWindowDimensions } from 'react-native';
+import { useAudioPlayer } from 'expo-audio';
 
 export default function App() {
   const [bpm, setBpm] = useState(120);
@@ -8,6 +9,15 @@ export default function App() {
   const [beat, setBeat] = useState(1);
   const intervalRef = useRef(null);
   const holdRef = useRef(null);
+
+  const highPlayer = useAudioPlayer(require('./assets/click-high.wav'));
+  const lowPlayer = useAudioPlayer(require('./assets/click-low.wav'));
+
+  const playClick = (isFirst) => {
+    const player = isFirst ? highPlayer : lowPlayer;
+    player.seekTo(0);
+    player.play();
+  };
 
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
@@ -45,9 +55,14 @@ export default function App() {
   useEffect(() => {
     if (running) {
       setBeat(1);
+      playClick(true);
       const ms = 60000 / bpm;
       intervalRef.current = setInterval(() => {
-        setBeat((prev) => (prev % 4) + 1);
+        setBeat((prev) => {
+          const next = (prev % 4) + 1;
+          playClick(next === 1);
+          return next;
+        });
       }, ms);
     } else {
       setBeat(1);
