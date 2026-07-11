@@ -114,6 +114,7 @@ export default function App() {
   const [sigId, setSigId] = useState('4/4');
   const [screen, setScreen] = useState('main'); // 'main' | 'settings'
   const [themePref, setThemePref] = useState('system'); // 'system' | 'light' | 'dark'
+  const [displayMode, setDisplayMode] = useState('numbers'); // 'numbers' | 'dots'
   const holdRef = useRef(null);
 
   const systemScheme = useColorScheme();
@@ -141,6 +142,7 @@ export default function App() {
           if (typeof s.bpm === 'number') setBpm(s.bpm);
           if (typeof s.sigId === 'string') setSigId(s.sigId);
           if (typeof s.themePref === 'string') setThemePref(s.themePref);
+          if (typeof s.displayMode === 'string') setDisplayMode(s.displayMode);
         }
       } catch (e) {
         // Einstellungen konnten nicht geladen werden – Standardwerte verwenden.
@@ -155,9 +157,9 @@ export default function App() {
     if (!loadedRef.current) return;
     AsyncStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ bpm, sigId, themePref })
+      JSON.stringify({ bpm, sigId, themePref, displayMode })
     ).catch(() => {});
-  }, [bpm, sigId, themePref]);
+  }, [bpm, sigId, themePref, displayMode]);
 
   const change = (delta) => {
     setBpm((prev) => Math.min(300, Math.max(30, prev + delta)));
@@ -324,6 +326,32 @@ export default function App() {
             </Pressable>
           );
         })}
+
+        <Text style={[styles.settingLabel, { color: c.sub, marginTop: 24 }]}>
+          Anzeige
+        </Text>
+        {[
+          { id: 'numbers', label: 'Zahlen' },
+          { id: 'dots', label: 'Punkte' },
+        ].map((d) => {
+          const active = displayMode === d.id;
+          return (
+            <Pressable
+              key={d.id}
+              style={[
+                styles.row,
+                { borderColor: c.border },
+                active && { borderColor: c.fg, backgroundColor: c.fg },
+              ]}
+              onPress={() => setDisplayMode(d.id)}
+            >
+              <Text style={[styles.rowName, { color: active ? c.fgText : c.text }]}>
+                {d.label}
+              </Text>
+              {active && <Text style={[styles.check, { color: c.fgText }]}>✓</Text>}
+            </Pressable>
+          );
+        })}
         </ScrollView>
 
         <StatusBar style={effectiveTheme === 'dark' ? 'light' : 'dark'} />
@@ -340,7 +368,27 @@ export default function App() {
       ]}
     >
       <Pressable style={styles.display} onPress={toggle}>
-        <Text style={[styles.beat, { color: c.text }]}>{beat}</Text>
+        {displayMode === 'dots' ? (
+          <View style={styles.dotsRow}>
+            {Array.from({ length: beatsPerBar }).map((_, i) => {
+              const filled = running && i < beat;
+              const isAccent = signature.accents.includes(i);
+              return (
+                <View
+                  key={i}
+                  style={[
+                    styles.dot,
+                    isAccent && styles.dotAccent,
+                    { borderColor: c.text },
+                    filled && { backgroundColor: c.text },
+                  ]}
+                />
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={[styles.beat, { color: c.text }]}>{beat}</Text>
+        )}
         <Text style={[styles.hint, { color: c.sub }]}>
           {running ? 'Tippen zum Stoppen' : 'Tippen zum Starten'}
         </Text>
@@ -418,6 +466,26 @@ const styles = StyleSheet.create({
   beat: {
     fontSize: 160,
     fontWeight: 'bold',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    maxWidth: 300,
+    gap: 16,
+  },
+  dot: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+  },
+  dotAccent: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 3,
   },
   hint: {
     fontSize: 16,
