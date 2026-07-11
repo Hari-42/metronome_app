@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "_tmp_metronome",
-    "slug": "_tmp_metronome",
+    "name": "Metronom",
+    "slug": "metronome-app",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -10,18 +10,29 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.hari42.metronomeapp",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-audio"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0f9b7e40-f155-4730-97ea-16906eefb1bf"
+      }
+    },
+    "owner": "hari-42"
   }
 }
