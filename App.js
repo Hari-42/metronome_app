@@ -242,7 +242,7 @@ export default function App() {
           onPress={() => setScreen('settings')}
           hitSlop={10}
         >
-          <Text style={styles.settingsIcon}>⚙️</Text>
+          <Text style={styles.settingsIcon}>⚙</Text>
         </Pressable>
       </View>
 
@@ -322,6 +322,7 @@ const styles = StyleSheet.create({
   },
   settingsIcon: {
     fontSize: 26,
+    color: '#222',
   },
   // Vollbild-Settings-Seite
   settingsScreen: {
