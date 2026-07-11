@@ -121,6 +121,7 @@ export default function App() {
   const beatsPerBar = signature.beats;
   const playerRef = useRef(null);
   const dispRef = useRef(null);
+  const tapTimesRef = useRef([]);
 
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
@@ -151,6 +152,32 @@ export default function App() {
 
   const toggle = () => {
     setRunning((prev) => !prev);
+  };
+
+  // Tap-Tempo: BPM aus dem Rhythmus der Taps ableiten.
+  const RESET_GAP = 2000; // ms: längere Pause startet eine neue Tap-Sequenz
+  const MIN_TAPS = 4; // erst nach so vielen Taps wird das Tempo übernommen
+  const MAX_TAPS = 8; // gleitender Mittelwert über die letzten Taps
+  const [tapCount, setTapCount] = useState(0);
+  const tapTempo = () => {
+    const now = performance.now();
+    let times = tapTimesRef.current;
+    if (times.length && now - times[times.length - 1] > RESET_GAP) {
+      times = []; // Sequenz zurücksetzen
+    }
+    times.push(now);
+    if (times.length > MAX_TAPS) times = times.slice(-MAX_TAPS);
+    tapTimesRef.current = times;
+    setTapCount(times.length);
+
+    // Erst ab MIN_TAPS Taps übernehmen – so hat man Zeit, sich einzupendeln.
+    if (times.length >= MIN_TAPS) {
+      // Durchschnitt aller Intervalle im Fenster = stabiler als der letzte Wert
+      const span = times[times.length - 1] - times[0];
+      const avgInterval = span / (times.length - 1);
+      const next = Math.round(60000 / avgInterval);
+      setBpm(Math.min(300, Math.max(30, next)));
+    }
   };
 
   useEffect(() => () => stopHold(), []);
@@ -304,6 +331,15 @@ export default function App() {
         <View style={styles.tempoBox}>
           <Text style={[styles.tempo, { color: c.text }]}>{bpm}</Text>
           <Text style={[styles.unit, { color: c.sub }]}>BPM · {sigId}</Text>
+          <Pressable
+            style={[styles.tapButton, { borderColor: c.fg }]}
+            onPress={tapTempo}
+            hitSlop={8}
+          >
+            <Text style={[styles.tapButtonText, { color: c.text }]}>
+              {tapCount > 0 && tapCount < MIN_TAPS ? `${tapCount}/${MIN_TAPS}` : 'TAP'}
+            </Text>
+          </Pressable>
         </View>
 
         <Pressable
@@ -384,6 +420,18 @@ const styles = StyleSheet.create({
   tempoBox: {
     alignItems: 'center',
     minWidth: 90,
+  },
+  tapButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 22,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  tapButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   tempo: {
     fontSize: 44,
