@@ -10,6 +10,9 @@ import {
   ScrollView,
 } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const STORAGE_KEY = 'metronome:settings';
 
 // --- Einen kompletten Takt (4 Schläge) als WAV erzeugen ---------------------
 // Wird als EINE Datei nahtlos geloopt. Dadurch übernimmt die Audio-Hardware
@@ -123,9 +126,38 @@ export default function App() {
   const playerRef = useRef(null);
   const dispRef = useRef(null);
   const tapTimesRef = useRef([]);
+  const loadedRef = useRef(false);
 
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
+
+  // Gespeicherte Einstellungen beim Start laden.
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const s = JSON.parse(raw);
+          if (typeof s.bpm === 'number') setBpm(s.bpm);
+          if (typeof s.sigId === 'string') setSigId(s.sigId);
+          if (typeof s.themePref === 'string') setThemePref(s.themePref);
+        }
+      } catch (e) {
+        // Einstellungen konnten nicht geladen werden – Standardwerte verwenden.
+      } finally {
+        loadedRef.current = true;
+      }
+    })();
+  }, []);
+
+  // Änderungen speichern (erst nach dem initialen Laden).
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    AsyncStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ bpm, sigId, themePref })
+    ).catch(() => {});
+  }, [bpm, sigId, themePref]);
 
   const change = (delta) => {
     setBpm((prev) => Math.min(300, Math.max(30, prev + delta)));
