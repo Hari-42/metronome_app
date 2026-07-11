@@ -7,6 +7,7 @@ import {
   Pressable,
   useWindowDimensions,
   useColorScheme,
+  ScrollView,
 } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
@@ -231,7 +232,8 @@ export default function App() {
 
   if (screen === 'settings') {
     return (
-      <View style={[styles.settingsScreen, { backgroundColor: c.bg }]}>
+      <View style={{ flex: 1, backgroundColor: c.bg }}>
+        <ScrollView contentContainerStyle={styles.settingsContent}>
         <View style={styles.settingsHeader}>
           <Pressable onPress={() => setScreen('main')} hitSlop={10}>
             <Text style={[styles.back, { color: c.text }]}>‹ Zurück</Text>
@@ -290,6 +292,7 @@ export default function App() {
             </Pressable>
           );
         })}
+        </ScrollView>
 
         <StatusBar style={effectiveTheme === 'dark' ? 'light' : 'dark'} />
       </View>
@@ -452,11 +455,10 @@ const styles = StyleSheet.create({
     color: '#222',
   },
   // Vollbild-Settings-Seite
-  settingsScreen: {
-    flex: 1,
-    backgroundColor: '#fff',
+  settingsContent: {
     paddingTop: 60,
     paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   settingsHeader: {
     flexDirection: 'row',
