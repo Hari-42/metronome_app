@@ -1,6 +1,13 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Pressable, useWindowDimensions } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  Pressable,
+  useWindowDimensions,
+  useColorScheme,
+} from 'react-native';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
 // --- Einen kompletten Takt (4 Schläge) als WAV erzeugen ---------------------
@@ -69,6 +76,25 @@ function makeBarDataUri(bpm, beats, accents) {
   return 'data:audio/wav;base64,' + bytesToBase64(bytes);
 }
 
+const THEMES = {
+  light: {
+    bg: '#fff',
+    text: '#222',
+    sub: '#888',
+    border: '#eee',
+    fg: '#222', // Buttons / aktive Flächen
+    fgText: '#fff', // Text auf fg
+  },
+  dark: {
+    bg: '#111',
+    text: '#f2f2f2',
+    sub: '#888',
+    border: '#333',
+    fg: '#f2f2f2',
+    fgText: '#111',
+  },
+};
+
 // Berühmteste Taktarten. accents = Schläge mit hohem Ton (Betonung).
 const SIGNATURES = [
   { id: '2/4', beats: 2, accents: [0], name: 'Marsch, Polka' },
@@ -83,7 +109,13 @@ export default function App() {
   const [beat, setBeat] = useState(1);
   const [sigId, setSigId] = useState('4/4');
   const [screen, setScreen] = useState('main'); // 'main' | 'settings'
+  const [themePref, setThemePref] = useState('system'); // 'system' | 'light' | 'dark'
   const holdRef = useRef(null);
+
+  const systemScheme = useColorScheme();
+  const effectiveTheme =
+    themePref === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : themePref;
+  const c = THEMES[effectiveTheme];
 
   const signature = SIGNATURES.find((s) => s.id === sigId) || SIGNATURES[2];
   const beatsPerBar = signature.beats;
@@ -172,69 +204,116 @@ export default function App() {
 
   if (screen === 'settings') {
     return (
-      <View style={styles.settingsScreen}>
+      <View style={[styles.settingsScreen, { backgroundColor: c.bg }]}>
         <View style={styles.settingsHeader}>
           <Pressable onPress={() => setScreen('main')} hitSlop={10}>
-            <Text style={styles.back}>‹ Zurück</Text>
+            <Text style={[styles.back, { color: c.text }]}>‹ Zurück</Text>
           </Pressable>
-          <Text style={styles.settingsTitle}>Einstellungen</Text>
+          <Text style={[styles.settingsTitle, { color: c.text }]}>Einstellungen</Text>
           <View style={styles.headerSpacer} />
         </View>
 
-        <Text style={styles.settingLabel}>Taktart</Text>
-        {SIGNATURES.map((s) => (
-          <Pressable
-            key={s.id}
-            style={[styles.row, sigId === s.id && styles.rowActive]}
-            onPress={() => setSigId(s.id)}
-          >
-            <Text style={[styles.rowId, sigId === s.id && styles.rowTextActive]}>
-              {s.id}
-            </Text>
-            <Text style={[styles.rowName, sigId === s.id && styles.rowTextActive]}>
-              {s.name}
-            </Text>
-            {sigId === s.id && <Text style={styles.check}>✓</Text>}
-          </Pressable>
-        ))}
+        <Text style={[styles.settingLabel, { color: c.sub }]}>Taktart</Text>
+        {SIGNATURES.map((s) => {
+          const active = sigId === s.id;
+          return (
+            <Pressable
+              key={s.id}
+              style={[
+                styles.row,
+                { borderColor: c.border },
+                active && { borderColor: c.fg, backgroundColor: c.fg },
+              ]}
+              onPress={() => setSigId(s.id)}
+            >
+              <Text style={[styles.rowId, { color: active ? c.fgText : c.text }]}>
+                {s.id}
+              </Text>
+              <Text style={[styles.rowName, { color: active ? c.fgText : c.sub }]}>
+                {s.name}
+              </Text>
+              {active && <Text style={[styles.check, { color: c.fgText }]}>✓</Text>}
+            </Pressable>
+          );
+        })}
 
-        <StatusBar style="auto" />
+        <Text style={[styles.settingLabel, { color: c.sub, marginTop: 24 }]}>
+          Darstellung
+        </Text>
+        {[
+          { id: 'system', label: 'System' },
+          { id: 'light', label: 'Hell' },
+          { id: 'dark', label: 'Dunkel' },
+        ].map((t) => {
+          const active = themePref === t.id;
+          return (
+            <Pressable
+              key={t.id}
+              style={[
+                styles.row,
+                { borderColor: c.border },
+                active && { borderColor: c.fg, backgroundColor: c.fg },
+              ]}
+              onPress={() => setThemePref(t.id)}
+            >
+              <Text style={[styles.rowName, { color: active ? c.fgText : c.text }]}>
+                {t.label}
+              </Text>
+              {active && <Text style={[styles.check, { color: c.fgText }]}>✓</Text>}
+            </Pressable>
+          );
+        })}
+
+        <StatusBar style={effectiveTheme === 'dark' ? 'light' : 'dark'} />
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, landscape && styles.containerLandscape]}>
+    <View
+      style={[
+        styles.container,
+        landscape && styles.containerLandscape,
+        { backgroundColor: c.bg },
+      ]}
+    >
       <Pressable style={styles.display} onPress={toggle}>
-        <Text style={styles.beat}>{beat}</Text>
-        <Text style={styles.hint}>{running ? 'Tippen zum Stoppen' : 'Tippen zum Starten'}</Text>
+        <Text style={[styles.beat, { color: c.text }]}>{beat}</Text>
+        <Text style={[styles.hint, { color: c.sub }]}>
+          {running ? 'Tippen zum Stoppen' : 'Tippen zum Starten'}
+        </Text>
       </Pressable>
 
       <View
         style={[
           styles.controls,
           landscape ? styles.controlsLandscape : styles.controlsPortrait,
+          landscape ? { borderLeftColor: c.border } : { borderTopColor: c.border },
         ]}
       >
         <Pressable
-          style={styles.button}
+          style={[styles.button, { backgroundColor: c.fg }]}
           onPressIn={() => startHold(landscape ? 1 : -1)}
           onPressOut={stopHold}
         >
-          <Text style={styles.buttonText}>{landscape ? '+' : '-'}</Text>
+          <Text style={[styles.buttonText, { color: c.fgText }]}>
+            {landscape ? '+' : '-'}
+          </Text>
         </Pressable>
 
         <View style={styles.tempoBox}>
-          <Text style={styles.tempo}>{bpm}</Text>
-          <Text style={styles.unit}>BPM · {sigId}</Text>
+          <Text style={[styles.tempo, { color: c.text }]}>{bpm}</Text>
+          <Text style={[styles.unit, { color: c.sub }]}>BPM · {sigId}</Text>
         </View>
 
         <Pressable
-          style={styles.button}
+          style={[styles.button, { backgroundColor: c.fg }]}
           onPressIn={() => startHold(landscape ? -1 : 1)}
           onPressOut={stopHold}
         >
-          <Text style={styles.buttonText}>{landscape ? '-' : '+'}</Text>
+          <Text style={[styles.buttonText, { color: c.fgText }]}>
+            {landscape ? '-' : '+'}
+          </Text>
         </Pressable>
 
         <Pressable
@@ -242,11 +321,11 @@ export default function App() {
           onPress={() => setScreen('settings')}
           hitSlop={10}
         >
-          <Text style={styles.settingsIcon}>⚙</Text>
+          <Text style={[styles.settingsIcon, { color: c.text }]}>⚙</Text>
         </Pressable>
       </View>
 
-      <StatusBar style="auto" />
+      <StatusBar style={effectiveTheme === 'dark' ? 'light' : 'dark'} />
     </View>
   );
 }
