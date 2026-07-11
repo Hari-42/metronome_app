@@ -27,15 +27,15 @@ function writeStr(dv, offset, str) {
   for (let i = 0; i < str.length; i++) dv.setUint8(offset + i, str.charCodeAt(i));
 }
 
-function makeBarDataUri(bpm) {
+function makeBarDataUri(bpm, beats, accents) {
   const rate = 44100;
   const beatSec = 60 / bpm;
-  const barSamples = Math.round(rate * beatSec * 4);
+  const barSamples = Math.round(rate * beatSec * beats);
   const clickLen = Math.floor(rate * 0.04);
   const pcm = new Int16Array(barSamples); // mit Stille initialisiert
 
-  for (let b = 0; b < 4; b++) {
-    const freq = b === 0 ? 1200 : 600;
+  for (let b = 0; b < beats; b++) {
+    const freq = accents.includes(b) ? 1200 : 600;
     const start = Math.round(b * beatSec * rate);
     for (let i = 0; i < clickLen && start + i < barSamples; i++) {
       const env = Math.exp((-i / clickLen) * 7);
@@ -69,11 +69,24 @@ function makeBarDataUri(bpm) {
   return 'data:audio/wav;base64,' + bytesToBase64(bytes);
 }
 
+// Berühmteste Taktarten. accents = Schläge mit hohem Ton (Betonung).
+const SIGNATURES = [
+  { id: '2/4', beats: 2, accents: [0], name: 'Marsch, Polka' },
+  { id: '3/4', beats: 3, accents: [0], name: 'Walzer' },
+  { id: '4/4', beats: 4, accents: [0], name: 'Standard (Pop, Rock)' },
+  { id: '6/8', beats: 6, accents: [0, 3], name: 'gefühlt in Zweiern' },
+];
+
 export default function App() {
   const [bpm, setBpm] = useState(120);
   const [running, setRunning] = useState(false);
   const [beat, setBeat] = useState(1);
+  const [sigId, setSigId] = useState('4/4');
+  const [screen, setScreen] = useState('main'); // 'main' | 'settings'
   const holdRef = useRef(null);
+
+  const signature = SIGNATURES.find((s) => s.id === sigId) || SIGNATURES[2];
+  const beatsPerBar = signature.beats;
   const playerRef = useRef(null);
   const dispRef = useRef(null);
 
@@ -130,7 +143,7 @@ export default function App() {
     }
 
     // Einen ganzen Takt erzeugen und nahtlos loopen lassen.
-    const uri = makeBarDataUri(bpm);
+    const uri = makeBarDataUri(bpm, signature.beats, signature.accents);
     if (!playerRef.current) {
       playerRef.current = createAudioPlayer({ uri });
     } else {
@@ -145,7 +158,7 @@ export default function App() {
     const beatSec = 60 / bpm;
     dispRef.current = setInterval(() => {
       const t = player.currentTime || 0;
-      const idx = Math.floor(t / beatSec) % 4;
+      const idx = Math.floor(t / beatSec) % beatsPerBar;
       setBeat(idx + 1);
     }, 40);
 
@@ -155,7 +168,40 @@ export default function App() {
         dispRef.current = null;
       }
     };
-  }, [running, bpm]);
+  }, [running, bpm, sigId]);
+
+  if (screen === 'settings') {
+    return (
+      <View style={styles.settingsScreen}>
+        <View style={styles.settingsHeader}>
+          <Pressable onPress={() => setScreen('main')} hitSlop={10}>
+            <Text style={styles.back}>‹ Zurück</Text>
+          </Pressable>
+          <Text style={styles.settingsTitle}>Einstellungen</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+
+        <Text style={styles.settingLabel}>Taktart</Text>
+        {SIGNATURES.map((s) => (
+          <Pressable
+            key={s.id}
+            style={[styles.row, sigId === s.id && styles.rowActive]}
+            onPress={() => setSigId(s.id)}
+          >
+            <Text style={[styles.rowId, sigId === s.id && styles.rowTextActive]}>
+              {s.id}
+            </Text>
+            <Text style={[styles.rowName, sigId === s.id && styles.rowTextActive]}>
+              {s.name}
+            </Text>
+            {sigId === s.id && <Text style={styles.check}>✓</Text>}
+          </Pressable>
+        ))}
+
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, landscape && styles.containerLandscape]}>
@@ -180,7 +226,7 @@ export default function App() {
 
         <View style={styles.tempoBox}>
           <Text style={styles.tempo}>{bpm}</Text>
-          <Text style={styles.unit}>BPM</Text>
+          <Text style={styles.unit}>BPM · {sigId}</Text>
         </View>
 
         <Pressable
@@ -189,6 +235,14 @@ export default function App() {
           onPressOut={stopHold}
         >
           <Text style={styles.buttonText}>{landscape ? '-' : '+'}</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.settingsButton}
+          onPress={() => setScreen('settings')}
+          hitSlop={10}
+        >
+          <Text style={styles.settingsIcon}>⚙️</Text>
         </Pressable>
       </View>
 
@@ -259,5 +313,78 @@ const styles = StyleSheet.create({
   unit: {
     fontSize: 16,
     color: '#888',
+  },
+  settingsButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    padding: 8,
+  },
+  settingsIcon: {
+    fontSize: 26,
+  },
+  // Vollbild-Settings-Seite
+  settingsScreen: {
+    flex: 1,
+    backgroundColor: '#fff',
+    paddingTop: 60,
+    paddingHorizontal: 20,
+  },
+  settingsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 30,
+  },
+  back: {
+    fontSize: 18,
+    color: '#222',
+  },
+  settingsTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  headerSpacer: {
+    width: 60,
+  },
+  settingLabel: {
+    fontSize: 15,
+    color: '#888',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#eee',
+    marginBottom: 10,
+  },
+  rowActive: {
+    borderColor: '#222',
+    backgroundColor: '#222',
+  },
+  rowId: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#222',
+    width: 60,
+  },
+  rowName: {
+    flex: 1,
+    fontSize: 15,
+    color: '#666',
+  },
+  rowTextActive: {
+    color: '#fff',
+  },
+  check: {
+    fontSize: 20,
+    color: '#fff',
+    marginLeft: 8,
   },
 });
