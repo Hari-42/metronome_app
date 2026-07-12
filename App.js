@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File, Paths } from 'expo-file-system';
 
 const STORAGE_KEY = 'metronome:settings';
 
@@ -18,27 +19,11 @@ const STORAGE_KEY = 'metronome:settings';
 // Wird als EINE Datei nahtlos geloopt. Dadurch übernimmt die Audio-Hardware
 // das Timing zwischen den Schlägen sample-genau, statt bei jedem Schlag einzeln
 // play() mit schwankender Latenz aufzurufen.
-const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-function bytesToBase64(bytes) {
-  let out = '';
-  for (let i = 0; i < bytes.length; i += 3) {
-    const b0 = bytes[i];
-    const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0;
-    const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0;
-    out += B64[b0 >> 2];
-    out += B64[((b0 & 3) << 4) | (b1 >> 4)];
-    out += i + 1 < bytes.length ? B64[((b1 & 15) << 2) | (b2 >> 6)] : '=';
-    out += i + 2 < bytes.length ? B64[b2 & 63] : '=';
-  }
-  return out;
-}
-
 function writeStr(dv, offset, str) {
   for (let i = 0; i < str.length; i++) dv.setUint8(offset + i, str.charCodeAt(i));
 }
 
-function makeBarDataUri(bpm, beats, accents) {
+function makeBarBytes(bpm, beats, accents) {
   const rate = 44100;
   const beatSec = 60 / bpm;
   const barSamples = Math.round(rate * beatSec * beats);
@@ -76,8 +61,24 @@ function makeBarDataUri(bpm, beats, accents) {
   writeStr(dv, 36, 'data');
   dv.setUint32(40, n * 2, true);
   for (let i = 0; i < n; i++) dv.setInt16(44 + i * 2, pcm[i], true);
+  return bytes;
+}
 
-  return 'data:audio/wav;base64,' + bytesToBase64(bytes);
+// Takt als echte Datei ablegen und deren URI zurückgeben. iOS loopt Dateien
+// lückenlos – eine data:-URI wird am Loop-Ende neu dekodiert und erzeugt eine
+// hörbare Pause vor Takt 1.
+function writeBarFile(bpm, beats, accents) {
+  const bytes = makeBarBytes(bpm, beats, accents);
+  const name = `bar_${bpm}_${beats}_${accents.join('-')}.wav`;
+  const file = new File(Paths.cache, name);
+  try {
+    if (file.exists) file.delete();
+  } catch (e) {
+    // ignorieren – wird gleich neu geschrieben
+  }
+  file.create();
+  file.write(bytes);
+  return file.uri;
 }
 
 const THEMES = {
@@ -115,6 +116,7 @@ export default function App() {
   const [screen, setScreen] = useState('main'); // 'main' | 'settings'
   const [themePref, setThemePref] = useState('system'); // 'system' | 'light' | 'dark'
   const [displayMode, setDisplayMode] = useState('numbers'); // 'numbers' | 'dots'
+  const [openSection, setOpenSection] = useState('sig'); // welche Kategorie aufgeklappt ist
   const holdRef = useRef(null);
 
   const systemScheme = useColorScheme();
@@ -236,8 +238,8 @@ export default function App() {
       return;
     }
 
-    // Einen ganzen Takt erzeugen und nahtlos loopen lassen.
-    const uri = makeBarDataUri(bpm, signature.beats, signature.accents);
+    // Einen ganzen Takt als Datei erzeugen und nahtlos loopen lassen.
+    const uri = writeBarFile(bpm, signature.beats, signature.accents);
     if (!playerRef.current) {
       playerRef.current = createAudioPlayer({ uri });
     } else {
@@ -265,93 +267,110 @@ export default function App() {
   }, [running, bpm, sigId]);
 
   if (screen === 'settings') {
+    const toggleSection = (key) =>
+      setOpenSection((cur) => (cur === key ? null : key));
+
+    const themeLabels = { system: 'System', light: 'Hell', dark: 'Dunkel' };
+    const displayLabels = { numbers: 'Zahlen', dots: 'Punkte' };
+
+    const SectionHeader = ({ id, title, value }) => (
+      <Pressable
+        style={[styles.sectionHeader, { borderColor: c.border }]}
+        onPress={() => toggleSection(id)}
+      >
+        <Text style={[styles.sectionTitle, { color: c.text }]}>{title}</Text>
+        <View style={styles.sectionRight}>
+          <Text style={[styles.sectionValue, { color: c.sub }]}>{value}</Text>
+          <Text style={[styles.chevron, { color: c.sub }]}>
+            {openSection === id ? '▾' : '▸'}
+          </Text>
+        </View>
+      </Pressable>
+    );
+
+    const OptionRow = ({ active, onPress, children }) => (
+      <Pressable
+        style={[
+          styles.row,
+          { borderColor: c.border },
+          active && { borderColor: c.fg, backgroundColor: c.fg },
+        ]}
+        onPress={onPress}
+      >
+        {children}
+        {active && <Text style={[styles.check, { color: c.fgText }]}>✓</Text>}
+      </Pressable>
+    );
+
     return (
       <View style={{ flex: 1, backgroundColor: c.bg }}>
         <ScrollView contentContainerStyle={styles.settingsContent}>
-        <View style={styles.settingsHeader}>
-          <Pressable onPress={() => setScreen('main')} hitSlop={10}>
-            <Text style={[styles.back, { color: c.text }]}>‹ Zurück</Text>
-          </Pressable>
-          <Text style={[styles.settingsTitle, { color: c.text }]}>Einstellungen</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-
-        <Text style={[styles.settingLabel, { color: c.sub }]}>Taktart</Text>
-        {SIGNATURES.map((s) => {
-          const active = sigId === s.id;
-          return (
-            <Pressable
-              key={s.id}
-              style={[
-                styles.row,
-                { borderColor: c.border },
-                active && { borderColor: c.fg, backgroundColor: c.fg },
-              ]}
-              onPress={() => setSigId(s.id)}
-            >
-              <Text style={[styles.rowId, { color: active ? c.fgText : c.text }]}>
-                {s.id}
-              </Text>
-              <Text style={[styles.rowName, { color: active ? c.fgText : c.sub }]}>
-                {s.name}
-              </Text>
-              {active && <Text style={[styles.check, { color: c.fgText }]}>✓</Text>}
+          <View style={styles.settingsHeader}>
+            <Pressable onPress={() => setScreen('main')} hitSlop={10}>
+              <Text style={[styles.back, { color: c.text }]}>‹ Zurück</Text>
             </Pressable>
-          );
-        })}
+            <Text style={[styles.settingsTitle, { color: c.text }]}>Einstellungen</Text>
+            <View style={styles.headerSpacer} />
+          </View>
 
-        <Text style={[styles.settingLabel, { color: c.sub, marginTop: 24 }]}>
-          Darstellung
-        </Text>
-        {[
-          { id: 'system', label: 'System' },
-          { id: 'light', label: 'Hell' },
-          { id: 'dark', label: 'Dunkel' },
-        ].map((t) => {
-          const active = themePref === t.id;
-          return (
-            <Pressable
-              key={t.id}
-              style={[
-                styles.row,
-                { borderColor: c.border },
-                active && { borderColor: c.fg, backgroundColor: c.fg },
-              ]}
-              onPress={() => setThemePref(t.id)}
-            >
-              <Text style={[styles.rowName, { color: active ? c.fgText : c.text }]}>
-                {t.label}
-              </Text>
-              {active && <Text style={[styles.check, { color: c.fgText }]}>✓</Text>}
-            </Pressable>
-          );
-        })}
+          <SectionHeader id="sig" title="Taktart" value={sigId} />
+          {openSection === 'sig' && (
+            <View style={styles.sectionBody}>
+              {SIGNATURES.map((s) => {
+                const active = sigId === s.id;
+                return (
+                  <OptionRow key={s.id} active={active} onPress={() => setSigId(s.id)}>
+                    <Text style={[styles.rowId, { color: active ? c.fgText : c.text }]}>
+                      {s.id}
+                    </Text>
+                    <Text style={[styles.rowName, { color: active ? c.fgText : c.sub }]}>
+                      {s.name}
+                    </Text>
+                  </OptionRow>
+                );
+              })}
+            </View>
+          )}
 
-        <Text style={[styles.settingLabel, { color: c.sub, marginTop: 24 }]}>
-          Anzeige
-        </Text>
-        {[
-          { id: 'numbers', label: 'Zahlen' },
-          { id: 'dots', label: 'Punkte' },
-        ].map((d) => {
-          const active = displayMode === d.id;
-          return (
-            <Pressable
-              key={d.id}
-              style={[
-                styles.row,
-                { borderColor: c.border },
-                active && { borderColor: c.fg, backgroundColor: c.fg },
-              ]}
-              onPress={() => setDisplayMode(d.id)}
-            >
-              <Text style={[styles.rowName, { color: active ? c.fgText : c.text }]}>
-                {d.label}
-              </Text>
-              {active && <Text style={[styles.check, { color: c.fgText }]}>✓</Text>}
-            </Pressable>
-          );
-        })}
+          <SectionHeader
+            id="theme"
+            title="Darstellung"
+            value={themeLabels[themePref]}
+          />
+          {openSection === 'theme' && (
+            <View style={styles.sectionBody}>
+              {['system', 'light', 'dark'].map((t) => {
+                const active = themePref === t;
+                return (
+                  <OptionRow key={t} active={active} onPress={() => setThemePref(t)}>
+                    <Text style={[styles.rowName, { color: active ? c.fgText : c.text }]}>
+                      {themeLabels[t]}
+                    </Text>
+                  </OptionRow>
+                );
+              })}
+            </View>
+          )}
+
+          <SectionHeader
+            id="display"
+            title="Anzeige"
+            value={displayLabels[displayMode]}
+          />
+          {openSection === 'display' && (
+            <View style={styles.sectionBody}>
+              {['numbers', 'dots'].map((d) => {
+                const active = displayMode === d;
+                return (
+                  <OptionRow key={d} active={active} onPress={() => setDisplayMode(d)}>
+                    <Text style={[styles.rowName, { color: active ? c.fgText : c.text }]}>
+                      {displayLabels[d]}
+                    </Text>
+                  </OptionRow>
+                );
+              })}
+            </View>
+          )}
         </ScrollView>
 
         <StatusBar style={effectiveTheme === 'dark' ? 'light' : 'dark'} />
@@ -583,6 +602,37 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  sectionRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sectionValue: {
+    fontSize: 15,
+    marginRight: 10,
+  },
+  chevron: {
+    fontSize: 14,
+    width: 16,
+    textAlign: 'center',
+  },
+  sectionBody: {
+    marginBottom: 10,
+    paddingLeft: 8,
   },
   row: {
     flexDirection: 'row',
