@@ -29,23 +29,33 @@ function writeStr(dv, offset, str) {
   for (let i = 0; i < str.length; i++) dv.setUint8(offset + i, str.charCodeAt(i));
 }
 
-function makeBarBytes(bpm, beats, accents, subdiv = 1) {
+// Klang-Definitionen: rein synthetisch, keine Audiodateien nötig.
+// partials = [Frequenz-Verhältnis, Amplitude], decay = Abfallgeschwindigkeit,
+// dur = Länge (s), gain = Gesamtlautstärke.
+const SOUNDS = {
+  click: { partials: [[1, 0.8], [2, 0.2]], decay: 7, dur: 0.04, gain: 1.6 },
+  wood: { partials: [[1, 0.7], [2.76, 0.3]], decay: 16, dur: 0.03, gain: 1.9 },
+  beep: { partials: [[1, 1]], decay: 3, dur: 0.07, gain: 1.2 },
+};
+
+function makeBarBytes(bpm, beats, accents, subdiv = 1, sound = 'click') {
   const rate = 44100;
   const beatSec = 60 / bpm;
   const barSamples = Math.round(rate * beatSec * beats);
-  const clickLen = Math.floor(rate * 0.04);
+  const cfg = SOUNDS[sound] || SOUNDS.click;
+  const clickLen = Math.floor(rate * cfg.dur);
   const pcm = new Int16Array(barSamples); // mit Stille initialisiert
 
   // Einen Klick an eine Position schreiben. gain skaliert die Lautstärke,
   // damit Unterteilungen leiser sind als die Hauptschläge.
   const writeClick = (start, freq, gain) => {
     for (let i = 0; i < clickLen && start + i < barSamples; i++) {
-      const env = Math.exp((-i / clickLen) * 7);
-      let s =
-        (Math.sin((2 * Math.PI * freq * i) / rate) * 0.8 +
-          Math.sin((2 * Math.PI * freq * 2 * i) / rate) * 0.2) *
-        env;
-      s = Math.max(-1, Math.min(1, s * 1.6 * gain));
+      const env = Math.exp((-i / clickLen) * cfg.decay);
+      let s = 0;
+      for (const [ratio, amp] of cfg.partials) {
+        s += Math.sin((2 * Math.PI * freq * ratio * i) / rate) * amp;
+      }
+      s = Math.max(-1, Math.min(1, s * env * cfg.gain * gain));
       // Bestehende Samples nicht überschreiben, sondern mischen (falls Überlappung)
       const prev = pcm[start + i] / 32767;
       pcm[start + i] = Math.max(-1, Math.min(1, prev + s)) * 32767;
@@ -87,9 +97,9 @@ function makeBarBytes(bpm, beats, accents, subdiv = 1) {
 // Takt als echte Datei ablegen und deren URI zurückgeben. iOS loopt Dateien
 // lückenlos – eine data:-URI wird am Loop-Ende neu dekodiert und erzeugt eine
 // hörbare Pause vor Takt 1.
-function writeBarFile(bpm, beats, accents, subdiv) {
-  const bytes = makeBarBytes(bpm, beats, accents, subdiv);
-  const name = `bar_${bpm}_${beats}_${accents.join('-')}_s${subdiv}.wav`;
+function writeBarFile(bpm, beats, accents, subdiv, sound) {
+  const bytes = makeBarBytes(bpm, beats, accents, subdiv, sound);
+  const name = `bar_${bpm}_${beats}_${accents.join('-')}_s${subdiv}_${sound}.wav`;
   const file = new File(Paths.cache, name);
   try {
     if (file.exists) file.delete();
@@ -137,6 +147,7 @@ export default function App() {
   const [themePref, setThemePref] = useState('system'); // 'system' | 'light' | 'dark'
   const [displayMode, setDisplayMode] = useState('numbers'); // 'numbers' | 'dots'
   const [subdiv, setSubdiv] = useState(1); // 1=aus, 2=Achtel, 3=Triolen, 4=Sechzehntel
+  const [sound, setSound] = useState('click'); // 'click' | 'wood' | 'beep'
   const [hapticsOn, setHapticsOn] = useState(false);
   const [hapticIntensity, setHapticIntensity] = useState(2); // 1=leicht, 2=mittel, 3=stark
   const [openSection, setOpenSection] = useState('sig'); // welche Kategorie aufgeklappt ist
@@ -174,6 +185,7 @@ export default function App() {
           if (typeof s.themePref === 'string') setThemePref(s.themePref);
           if (typeof s.displayMode === 'string') setDisplayMode(s.displayMode);
           if (typeof s.subdiv === 'number') setSubdiv(s.subdiv);
+          if (typeof s.sound === 'string') setSound(s.sound);
           if (typeof s.hapticsOn === 'boolean') setHapticsOn(s.hapticsOn);
           if (typeof s.hapticIntensity === 'number') setHapticIntensity(s.hapticIntensity);
         }
@@ -196,11 +208,12 @@ export default function App() {
         themePref,
         displayMode,
         subdiv,
+        sound,
         hapticsOn,
         hapticIntensity,
       })
     ).catch(() => {});
-  }, [bpm, sigId, themePref, displayMode, subdiv, hapticsOn, hapticIntensity]);
+  }, [bpm, sigId, themePref, displayMode, subdiv, sound, hapticsOn, hapticIntensity]);
 
   const change = (delta) => {
     setBpm((prev) => clampBpm(prev + delta));
@@ -278,7 +291,7 @@ export default function App() {
     }
 
     // Einen ganzen Takt als Datei erzeugen und nahtlos loopen lassen.
-    const uri = writeBarFile(bpm, signature.beats, signature.accents, subdiv);
+    const uri = writeBarFile(bpm, signature.beats, signature.accents, subdiv, sound);
     if (!playerRef.current) {
       playerRef.current = createAudioPlayer({ uri });
     } else {
@@ -318,7 +331,7 @@ export default function App() {
         dispRef.current = null;
       }
     };
-  }, [running, bpm, sigId, subdiv]);
+  }, [running, bpm, sigId, subdiv, sound]);
 
   if (screen === 'settings') {
     const toggleSection = (key) =>
@@ -333,6 +346,7 @@ export default function App() {
       { id: 4, label: 'Sechzehntel' },
     ];
     const subdivLabel = subdivOptions.find((o) => o.id === subdiv)?.label ?? 'Aus';
+    const soundLabels = { click: 'Klick', wood: 'Holzblock', beep: 'Piep' };
 
     const SectionHeader = ({ id, title, value }) => (
       <Pressable
@@ -402,6 +416,22 @@ export default function App() {
                   <OptionRow key={o.id} active={active} onPress={() => setSubdiv(o.id)}>
                     <Text style={[styles.rowName, { color: active ? c.fgText : c.text }]}>
                       {o.label}
+                    </Text>
+                  </OptionRow>
+                );
+              })}
+            </View>
+          )}
+
+          <SectionHeader id="sound" title="Klang" value={soundLabels[sound]} />
+          {openSection === 'sound' && (
+            <View style={styles.sectionBody}>
+              {['click', 'wood', 'beep'].map((s) => {
+                const active = sound === s;
+                return (
+                  <OptionRow key={s} active={active} onPress={() => setSound(s)}>
+                    <Text style={[styles.rowName, { color: active ? c.fgText : c.text }]}>
+                      {soundLabels[s]}
                     </Text>
                   </OptionRow>
                 );
