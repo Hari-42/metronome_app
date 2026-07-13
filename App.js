@@ -9,6 +9,7 @@ import {
   useColorScheme,
   ScrollView,
   Switch,
+  TextInput,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
@@ -16,6 +17,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
 
 const STORAGE_KEY = 'metronome:settings';
+const MIN_BPM = 30;
+const MAX_BPM = 400;
+const clampBpm = (n) => Math.min(MAX_BPM, Math.max(MIN_BPM, n));
 
 // --- Einen kompletten Takt (4 Schläge) als WAV erzeugen ---------------------
 // Wird als EINE Datei nahtlos geloopt. Dadurch übernimmt die Audio-Hardware
@@ -187,7 +191,7 @@ export default function App() {
   }, [bpm, sigId, themePref, displayMode, subdiv, hapticsOn]);
 
   const change = (delta) => {
-    setBpm((prev) => Math.min(300, Math.max(30, prev + delta)));
+    setBpm((prev) => clampBpm(prev + delta));
   };
 
   const startHold = (delta) => {
@@ -236,8 +240,21 @@ export default function App() {
       const span = times[times.length - 1] - times[0];
       const avgInterval = span / (times.length - 1);
       const next = Math.round(60000 / avgInterval);
-      setBpm(Math.min(300, Math.max(30, next)));
+      setBpm(clampBpm(next));
     }
+  };
+
+  // Direkte BPM-Eingabe per Tippen auf die Zahl.
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const startEditBpm = () => {
+    setEditValue(String(bpm));
+    setEditing(true);
+  };
+  const commitEditBpm = () => {
+    const n = parseInt(editValue, 10);
+    if (!Number.isNaN(n)) setBpm(clampBpm(n));
+    setEditing(false);
   };
 
   useEffect(() => () => stopHold(), []);
@@ -498,7 +515,24 @@ export default function App() {
         </Pressable>
 
         <View style={styles.tempoBox}>
-          <Text style={[styles.tempo, { color: c.text }]}>{bpm}</Text>
+          {editing ? (
+            <TextInput
+              style={[styles.tempo, styles.tempoInput, { color: c.text, borderColor: c.fg }]}
+              value={editValue}
+              onChangeText={(txt) => setEditValue(txt.replace(/[^0-9]/g, '').slice(0, 3))}
+              onBlur={commitEditBpm}
+              onSubmitEditing={commitEditBpm}
+              keyboardType="number-pad"
+              autoFocus
+              selectTextOnFocus
+              maxLength={3}
+              returnKeyType="done"
+            />
+          ) : (
+            <Pressable onPress={startEditBpm}>
+              <Text style={[styles.tempo, { color: c.text }]}>{bpm}</Text>
+            </Pressable>
+          )}
           <Text style={[styles.unit, { color: c.sub }]}>BPM · {sigId}</Text>
           <Pressable
             style={[styles.tapButton, { borderColor: c.fg }]}
@@ -625,6 +659,12 @@ const styles = StyleSheet.create({
   tempo: {
     fontSize: 44,
     fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  tempoInput: {
+    minWidth: 110,
+    borderBottomWidth: 2,
+    paddingVertical: 0,
   },
   unit: {
     fontSize: 16,
