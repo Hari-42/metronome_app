@@ -8,7 +8,9 @@ import {
   useWindowDimensions,
   useColorScheme,
   ScrollView,
+  Switch,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
@@ -131,7 +133,11 @@ export default function App() {
   const [themePref, setThemePref] = useState('system'); // 'system' | 'light' | 'dark'
   const [displayMode, setDisplayMode] = useState('numbers'); // 'numbers' | 'dots'
   const [subdiv, setSubdiv] = useState(1); // 1=aus, 2=Achtel, 3=Triolen, 4=Sechzehntel
+  const [hapticsOn, setHapticsOn] = useState(false);
   const [openSection, setOpenSection] = useState('sig'); // welche Kategorie aufgeklappt ist
+
+  const hapticsOnRef = useRef(false);
+  hapticsOnRef.current = hapticsOn;
   const holdRef = useRef(null);
 
   const systemScheme = useColorScheme();
@@ -161,6 +167,7 @@ export default function App() {
           if (typeof s.themePref === 'string') setThemePref(s.themePref);
           if (typeof s.displayMode === 'string') setDisplayMode(s.displayMode);
           if (typeof s.subdiv === 'number') setSubdiv(s.subdiv);
+          if (typeof s.hapticsOn === 'boolean') setHapticsOn(s.hapticsOn);
         }
       } catch (e) {
         // Einstellungen konnten nicht geladen werden – Standardwerte verwenden.
@@ -175,9 +182,9 @@ export default function App() {
     if (!loadedRef.current) return;
     AsyncStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ bpm, sigId, themePref, displayMode, subdiv })
+      JSON.stringify({ bpm, sigId, themePref, displayMode, subdiv, hapticsOn })
     ).catch(() => {});
-  }, [bpm, sigId, themePref, displayMode, subdiv]);
+  }, [bpm, sigId, themePref, displayMode, subdiv, hapticsOn]);
 
   const change = (delta) => {
     setBpm((prev) => Math.min(300, Math.max(30, prev + delta)));
@@ -268,11 +275,22 @@ export default function App() {
 
     // Anzeige der aktuellen Zahl aus der echten Wiedergabeposition ableiten.
     const beatSec = 60 / bpm;
+    let lastIdx = -1;
     dispRef.current = setInterval(() => {
       const t = player.currentTime || 0;
       const idx = Math.floor(t / beatSec) % beatsPerBar;
-      setBeat(idx + 1);
-    }, 40);
+      if (idx !== lastIdx) {
+        lastIdx = idx;
+        setBeat(idx + 1);
+        // Vibration synchron zum Schlagwechsel; betonter Schlag = stärker.
+        if (hapticsOnRef.current) {
+          const style = signature.accents.includes(idx)
+            ? Haptics.ImpactFeedbackStyle.Heavy
+            : Haptics.ImpactFeedbackStyle.Light;
+          Haptics.impactAsync(style).catch(() => {});
+        }
+      }
+    }, 15);
 
     return () => {
       if (dispRef.current) {
@@ -410,6 +428,16 @@ export default function App() {
               })}
             </View>
           )}
+
+          <View style={[styles.toggleRow, { borderColor: c.border }]}>
+            <Text style={[styles.sectionTitle, { color: c.text }]}>Vibration</Text>
+            <Switch
+              value={hapticsOn}
+              onValueChange={setHapticsOn}
+              trackColor={{ true: c.fg }}
+              thumbColor="#fff"
+            />
+          </View>
         </ScrollView>
 
         <StatusBar style={effectiveTheme === 'dark' ? 'light' : 'dark'} />
@@ -672,6 +700,16 @@ const styles = StyleSheet.create({
   sectionBody: {
     marginBottom: 10,
     paddingLeft: 8,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
   },
   row: {
     flexDirection: 'row',
