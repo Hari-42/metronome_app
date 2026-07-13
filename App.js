@@ -23,24 +23,38 @@ function writeStr(dv, offset, str) {
   for (let i = 0; i < str.length; i++) dv.setUint8(offset + i, str.charCodeAt(i));
 }
 
-function makeBarBytes(bpm, beats, accents) {
+function makeBarBytes(bpm, beats, accents, subdiv = 1) {
   const rate = 44100;
   const beatSec = 60 / bpm;
   const barSamples = Math.round(rate * beatSec * beats);
   const clickLen = Math.floor(rate * 0.04);
   const pcm = new Int16Array(barSamples); // mit Stille initialisiert
 
-  for (let b = 0; b < beats; b++) {
-    const freq = accents.includes(b) ? 1200 : 600;
-    const start = Math.round(b * beatSec * rate);
+  // Einen Klick an eine Position schreiben. gain skaliert die Lautstärke,
+  // damit Unterteilungen leiser sind als die Hauptschläge.
+  const writeClick = (start, freq, gain) => {
     for (let i = 0; i < clickLen && start + i < barSamples; i++) {
       const env = Math.exp((-i / clickLen) * 7);
       let s =
         (Math.sin((2 * Math.PI * freq * i) / rate) * 0.8 +
           Math.sin((2 * Math.PI * freq * 2 * i) / rate) * 0.2) *
         env;
-      s = Math.max(-1, Math.min(1, s * 1.6));
-      pcm[start + i] = s * 32767;
+      s = Math.max(-1, Math.min(1, s * 1.6 * gain));
+      // Bestehende Samples nicht überschreiben, sondern mischen (falls Überlappung)
+      const prev = pcm[start + i] / 32767;
+      pcm[start + i] = Math.max(-1, Math.min(1, prev + s)) * 32767;
+    }
+  };
+
+  for (let b = 0; b < beats; b++) {
+    // Hauptschlag: betont (hoch) oder normal
+    const freq = accents.includes(b) ? 1200 : 600;
+    writeClick(Math.round(b * beatSec * rate), freq, 1);
+
+    // Unterteilungen zwischen den Hauptschlägen: leiser, eigener Ton
+    for (let s = 1; s < subdiv; s++) {
+      const start = Math.round((b + s / subdiv) * beatSec * rate);
+      writeClick(start, 900, 0.35);
     }
   }
 
@@ -67,9 +81,9 @@ function makeBarBytes(bpm, beats, accents) {
 // Takt als echte Datei ablegen und deren URI zurückgeben. iOS loopt Dateien
 // lückenlos – eine data:-URI wird am Loop-Ende neu dekodiert und erzeugt eine
 // hörbare Pause vor Takt 1.
-function writeBarFile(bpm, beats, accents) {
-  const bytes = makeBarBytes(bpm, beats, accents);
-  const name = `bar_${bpm}_${beats}_${accents.join('-')}.wav`;
+function writeBarFile(bpm, beats, accents, subdiv) {
+  const bytes = makeBarBytes(bpm, beats, accents, subdiv);
+  const name = `bar_${bpm}_${beats}_${accents.join('-')}_s${subdiv}.wav`;
   const file = new File(Paths.cache, name);
   try {
     if (file.exists) file.delete();
@@ -116,6 +130,7 @@ export default function App() {
   const [screen, setScreen] = useState('main'); // 'main' | 'settings'
   const [themePref, setThemePref] = useState('system'); // 'system' | 'light' | 'dark'
   const [displayMode, setDisplayMode] = useState('numbers'); // 'numbers' | 'dots'
+  const [subdiv, setSubdiv] = useState(1); // 1=aus, 2=Achtel, 3=Triolen, 4=Sechzehntel
   const [openSection, setOpenSection] = useState('sig'); // welche Kategorie aufgeklappt ist
   const holdRef = useRef(null);
 
@@ -145,6 +160,7 @@ export default function App() {
           if (typeof s.sigId === 'string') setSigId(s.sigId);
           if (typeof s.themePref === 'string') setThemePref(s.themePref);
           if (typeof s.displayMode === 'string') setDisplayMode(s.displayMode);
+          if (typeof s.subdiv === 'number') setSubdiv(s.subdiv);
         }
       } catch (e) {
         // Einstellungen konnten nicht geladen werden – Standardwerte verwenden.
@@ -159,9 +175,9 @@ export default function App() {
     if (!loadedRef.current) return;
     AsyncStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ bpm, sigId, themePref, displayMode })
+      JSON.stringify({ bpm, sigId, themePref, displayMode, subdiv })
     ).catch(() => {});
-  }, [bpm, sigId, themePref, displayMode]);
+  }, [bpm, sigId, themePref, displayMode, subdiv]);
 
   const change = (delta) => {
     setBpm((prev) => Math.min(300, Math.max(30, prev + delta)));
@@ -239,7 +255,7 @@ export default function App() {
     }
 
     // Einen ganzen Takt als Datei erzeugen und nahtlos loopen lassen.
-    const uri = writeBarFile(bpm, signature.beats, signature.accents);
+    const uri = writeBarFile(bpm, signature.beats, signature.accents, subdiv);
     if (!playerRef.current) {
       playerRef.current = createAudioPlayer({ uri });
     } else {
@@ -264,7 +280,7 @@ export default function App() {
         dispRef.current = null;
       }
     };
-  }, [running, bpm, sigId]);
+  }, [running, bpm, sigId, subdiv]);
 
   if (screen === 'settings') {
     const toggleSection = (key) =>
@@ -272,6 +288,13 @@ export default function App() {
 
     const themeLabels = { system: 'System', light: 'Hell', dark: 'Dunkel' };
     const displayLabels = { numbers: 'Zahlen', dots: 'Punkte' };
+    const subdivOptions = [
+      { id: 1, label: 'Aus (Viertel)' },
+      { id: 2, label: 'Achtel' },
+      { id: 3, label: 'Triolen' },
+      { id: 4, label: 'Sechzehntel' },
+    ];
+    const subdivLabel = subdivOptions.find((o) => o.id === subdiv)?.label ?? 'Aus';
 
     const SectionHeader = ({ id, title, value }) => (
       <Pressable
@@ -325,6 +348,22 @@ export default function App() {
                     </Text>
                     <Text style={[styles.rowName, { color: active ? c.fgText : c.sub }]}>
                       {s.name}
+                    </Text>
+                  </OptionRow>
+                );
+              })}
+            </View>
+          )}
+
+          <SectionHeader id="subdiv" title="Unterteilung" value={subdivLabel} />
+          {openSection === 'subdiv' && (
+            <View style={styles.sectionBody}>
+              {subdivOptions.map((o) => {
+                const active = subdiv === o.id;
+                return (
+                  <OptionRow key={o.id} active={active} onPress={() => setSubdiv(o.id)}>
+                    <Text style={[styles.rowName, { color: active ? c.fgText : c.text }]}>
+                      {o.label}
                     </Text>
                   </OptionRow>
                 );
