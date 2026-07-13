@@ -9,8 +9,8 @@ import {
   useColorScheme,
   ScrollView,
   Switch,
-  TextInput,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -138,10 +138,13 @@ export default function App() {
   const [displayMode, setDisplayMode] = useState('numbers'); // 'numbers' | 'dots'
   const [subdiv, setSubdiv] = useState(1); // 1=aus, 2=Achtel, 3=Triolen, 4=Sechzehntel
   const [hapticsOn, setHapticsOn] = useState(false);
+  const [hapticIntensity, setHapticIntensity] = useState(2); // 1=leicht, 2=mittel, 3=stark
   const [openSection, setOpenSection] = useState('sig'); // welche Kategorie aufgeklappt ist
 
   const hapticsOnRef = useRef(false);
   hapticsOnRef.current = hapticsOn;
+  const hapticIntensityRef = useRef(2);
+  hapticIntensityRef.current = hapticIntensity;
   const holdRef = useRef(null);
 
   const systemScheme = useColorScheme();
@@ -172,6 +175,7 @@ export default function App() {
           if (typeof s.displayMode === 'string') setDisplayMode(s.displayMode);
           if (typeof s.subdiv === 'number') setSubdiv(s.subdiv);
           if (typeof s.hapticsOn === 'boolean') setHapticsOn(s.hapticsOn);
+          if (typeof s.hapticIntensity === 'number') setHapticIntensity(s.hapticIntensity);
         }
       } catch (e) {
         // Einstellungen konnten nicht geladen werden – Standardwerte verwenden.
@@ -186,9 +190,17 @@ export default function App() {
     if (!loadedRef.current) return;
     AsyncStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ bpm, sigId, themePref, displayMode, subdiv, hapticsOn })
+      JSON.stringify({
+        bpm,
+        sigId,
+        themePref,
+        displayMode,
+        subdiv,
+        hapticsOn,
+        hapticIntensity,
+      })
     ).catch(() => {});
-  }, [bpm, sigId, themePref, displayMode, subdiv, hapticsOn]);
+  }, [bpm, sigId, themePref, displayMode, subdiv, hapticsOn, hapticIntensity]);
 
   const change = (delta) => {
     setBpm((prev) => clampBpm(prev + delta));
@@ -244,19 +256,6 @@ export default function App() {
     }
   };
 
-  // Direkte BPM-Eingabe per Tippen auf die Zahl.
-  const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState('');
-  const startEditBpm = () => {
-    setEditValue(String(bpm));
-    setEditing(true);
-  };
-  const commitEditBpm = () => {
-    const n = parseInt(editValue, 10);
-    if (!Number.isNaN(n)) setBpm(clampBpm(n));
-    setEditing(false);
-  };
-
   useEffect(() => () => stopHold(), []);
 
   // Audio-Modus für möglichst niedrige Latenz / Wiedergabe auch im Stumm-Modus
@@ -299,12 +298,16 @@ export default function App() {
       if (idx !== lastIdx) {
         lastIdx = idx;
         setBeat(idx + 1);
-        // Vibration synchron zum Schlagwechsel; betonter Schlag = stärker.
+        // Vibration synchron zum Schlagwechsel; betonter Schlag = eine Stufe stärker.
         if (hapticsOnRef.current) {
-          const style = signature.accents.includes(idx)
-            ? Haptics.ImpactFeedbackStyle.Heavy
-            : Haptics.ImpactFeedbackStyle.Light;
-          Haptics.impactAsync(style).catch(() => {});
+          const styles = [
+            Haptics.ImpactFeedbackStyle.Light,
+            Haptics.ImpactFeedbackStyle.Medium,
+            Haptics.ImpactFeedbackStyle.Heavy,
+          ];
+          let level = hapticIntensityRef.current - 1; // 0..2
+          if (signature.accents.includes(idx)) level = Math.min(2, level + 1);
+          Haptics.impactAsync(styles[level]).catch(() => {});
         }
       }
     }, 15);
@@ -455,6 +458,27 @@ export default function App() {
               thumbColor="#fff"
             />
           </View>
+
+          {hapticsOn && (
+            <View style={[styles.sliderRow, { borderColor: c.border }]}>
+              <View style={styles.sliderHeader}>
+                <Text style={[styles.rowName, { color: c.text }]}>Intensität</Text>
+                <Text style={[styles.sectionValue, { color: c.sub }]}>
+                  {['Leicht', 'Mittel', 'Stark'][hapticIntensity - 1]}
+                </Text>
+              </View>
+              <Slider
+                minimumValue={1}
+                maximumValue={3}
+                step={1}
+                value={hapticIntensity}
+                onValueChange={(v) => setHapticIntensity(v)}
+                minimumTrackTintColor={c.fg}
+                maximumTrackTintColor={c.border}
+                thumbTintColor={c.fg}
+              />
+            </View>
+          )}
         </ScrollView>
 
         <StatusBar style={effectiveTheme === 'dark' ? 'light' : 'dark'} />
@@ -515,24 +539,7 @@ export default function App() {
         </Pressable>
 
         <View style={styles.tempoBox}>
-          {editing ? (
-            <TextInput
-              style={[styles.tempo, styles.tempoInput, { color: c.text, borderColor: c.fg }]}
-              value={editValue}
-              onChangeText={(txt) => setEditValue(txt.replace(/[^0-9]/g, '').slice(0, 3))}
-              onBlur={commitEditBpm}
-              onSubmitEditing={commitEditBpm}
-              keyboardType="number-pad"
-              autoFocus
-              selectTextOnFocus
-              maxLength={3}
-              returnKeyType="done"
-            />
-          ) : (
-            <Pressable onPress={startEditBpm}>
-              <Text style={[styles.tempo, { color: c.text }]}>{bpm}</Text>
-            </Pressable>
-          )}
+          <Text style={[styles.tempo, { color: c.text }]}>{bpm}</Text>
           <Text style={[styles.unit, { color: c.sub }]}>BPM · {sigId}</Text>
           <Pressable
             style={[styles.tapButton, { borderColor: c.fg }]}
@@ -661,11 +668,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
-  tempoInput: {
-    minWidth: 110,
-    borderBottomWidth: 2,
-    paddingVertical: 0,
-  },
   unit: {
     fontSize: 16,
     color: '#888',
@@ -750,6 +752,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     marginBottom: 10,
+  },
+  sliderRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  sliderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
   row: {
     flexDirection: 'row',
