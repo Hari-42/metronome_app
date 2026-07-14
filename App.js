@@ -166,6 +166,7 @@ export default function App() {
   const signature = SIGNATURES.find((s) => s.id === sigId) || SIGNATURES[2];
   const beatsPerBar = signature.beats;
   const playerRef = useRef(null);
+  const previewRef = useRef(null);
   const dispRef = useRef(null);
   const tapTimesRef = useRef([]);
   const loadedRef = useRef(false);
@@ -243,6 +244,22 @@ export default function App() {
     setRunning((prev) => !prev);
   };
 
+  // Kurzes Beispiel eines Klangs abspielen (2 Schläge bei 90 BPM).
+  const previewSound = (sid) => {
+    try {
+      const uri = writeBarFile(90, 2, [0], 1, sid);
+      if (!previewRef.current) {
+        previewRef.current = createAudioPlayer({ uri });
+      } else {
+        previewRef.current.replace({ uri });
+      }
+      previewRef.current.seekTo(0);
+      previewRef.current.play();
+    } catch (e) {
+      // Vorschau nicht kritisch – Fehler ignorieren
+    }
+  };
+
   // Tap-Tempo: BPM aus dem Rhythmus der Taps ableiten.
   const RESET_GAP = 2000; // ms: längere Pause startet eine neue Tap-Sequenz
   const MIN_TAPS = 4; // erst nach so vielen Taps wird das Tempo übernommen
@@ -278,6 +295,10 @@ export default function App() {
       if (playerRef.current) {
         playerRef.current.remove();
         playerRef.current = null;
+      }
+      if (previewRef.current) {
+        previewRef.current.remove();
+        previewRef.current = null;
       }
     };
   }, []);
@@ -429,7 +450,14 @@ export default function App() {
               {['click', 'wood', 'beep'].map((s) => {
                 const active = sound === s;
                 return (
-                  <OptionRow key={s} active={active} onPress={() => setSound(s)}>
+                  <OptionRow
+                    key={s}
+                    active={active}
+                    onPress={() => {
+                      setSound(s);
+                      previewSound(s);
+                    }}
+                  >
                     <Text style={[styles.rowName, { color: active ? c.fgText : c.text }]}>
                       {soundLabels[s]}
                     </Text>
