@@ -10,8 +10,8 @@ import {
   ScrollView,
   Switch,
 } from 'react-native';
-import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
+import * as Localization from 'expo-localization';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
@@ -132,11 +132,81 @@ const THEMES = {
 
 // Berühmteste Taktarten. accents = Schläge mit hohem Ton (Betonung).
 const SIGNATURES = [
-  { id: '2/4', beats: 2, accents: [0], name: 'Marsch, Polka' },
-  { id: '3/4', beats: 3, accents: [0], name: 'Walzer' },
-  { id: '4/4', beats: 4, accents: [0], name: 'Standard (Pop, Rock)' },
-  { id: '6/8', beats: 6, accents: [0, 3], name: 'gefühlt in Zweiern' },
+  { id: '2/4', beats: 2, accents: [0], nameKey: 'sigMarch' },
+  { id: '3/4', beats: 3, accents: [0], nameKey: 'sigWaltz' },
+  { id: '4/4', beats: 4, accents: [0], nameKey: 'sigStandard' },
+  { id: '6/8', beats: 6, accents: [0, 3], nameKey: 'sigCompound' },
 ];
+
+// Übersetzungen – die App folgt automatisch der Gerätesprache (Fallback: Englisch).
+const TRANSLATIONS = {
+  de: {
+    tapToStart: 'Tippen zum Starten',
+    tapToStop: 'Tippen zum Stoppen',
+    settings: 'Einstellungen',
+    back: '‹ Zurück',
+    timeSignature: 'Taktart',
+    subdivision: 'Unterteilung',
+    sound: 'Klang',
+    appearance: 'Darstellung',
+    display: 'Anzeige',
+    visualAccent: 'Visueller Akzent',
+    vibration: 'Vibration',
+    intensity: 'Intensität',
+    sigMarch: 'Marsch, Polka',
+    sigWaltz: 'Walzer',
+    sigStandard: 'Standard (Pop, Rock)',
+    sigCompound: 'gefühlt in Zweiern',
+    subdivOff: 'Aus (Viertel)',
+    subdivEighths: 'Achtel',
+    subdivTriplets: 'Triolen',
+    subdivSixteenths: 'Sechzehntel',
+    soundClick: 'Klick',
+    soundWood: 'Holzblock',
+    soundBeep: 'Piep',
+    themeSystem: 'System',
+    themeLight: 'Hell',
+    themeDark: 'Dunkel',
+    displayNumbers: 'Zahlen',
+    displayDots: 'Punkte',
+    intensityLight: 'Leicht',
+    intensityMedium: 'Mittel',
+    intensityStrong: 'Stark',
+  },
+  en: {
+    tapToStart: 'Tap to start',
+    tapToStop: 'Tap to stop',
+    settings: 'Settings',
+    back: '‹ Back',
+    timeSignature: 'Time signature',
+    subdivision: 'Subdivision',
+    sound: 'Sound',
+    appearance: 'Appearance',
+    display: 'Display',
+    visualAccent: 'Visual accent',
+    vibration: 'Vibration',
+    intensity: 'Intensity',
+    sigMarch: 'March, polka',
+    sigWaltz: 'Waltz',
+    sigStandard: 'Standard (pop, rock)',
+    sigCompound: 'felt in two',
+    subdivOff: 'Off (quarter)',
+    subdivEighths: 'Eighths',
+    subdivTriplets: 'Triplets',
+    subdivSixteenths: 'Sixteenths',
+    soundClick: 'Click',
+    soundWood: 'Woodblock',
+    soundBeep: 'Beep',
+    themeSystem: 'System',
+    themeLight: 'Light',
+    themeDark: 'Dark',
+    displayNumbers: 'Numbers',
+    displayDots: 'Dots',
+    intensityLight: 'Light',
+    intensityMedium: 'Medium',
+    intensityStrong: 'Strong',
+  },
+};
 
 export default function App() {
   const [bpm, setBpm] = useState(120);
@@ -163,6 +233,10 @@ export default function App() {
   const effectiveTheme =
     themePref === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : themePref;
   const c = THEMES[effectiveTheme];
+
+  // Gerätesprache automatisch übernehmen (Fallback: Englisch).
+  const deviceLang = Localization.getLocales()[0]?.languageCode;
+  const L = TRANSLATIONS[deviceLang] || TRANSLATIONS.en;
 
   const signature = SIGNATURES.find((s) => s.id === sigId) || SIGNATURES[2];
   const beatsPerBar = signature.beats;
@@ -371,16 +445,20 @@ export default function App() {
     const toggleSection = (key) =>
       setOpenSection((cur) => (cur === key ? null : key));
 
-    const themeLabels = { system: 'System', light: 'Hell', dark: 'Dunkel' };
-    const displayLabels = { numbers: 'Zahlen', dots: 'Punkte' };
+    const themeLabels = {
+      system: L.themeSystem,
+      light: L.themeLight,
+      dark: L.themeDark,
+    };
+    const displayLabels = { numbers: L.displayNumbers, dots: L.displayDots };
     const subdivOptions = [
-      { id: 1, label: 'Aus (Viertel)' },
-      { id: 2, label: 'Achtel' },
-      { id: 3, label: 'Triolen' },
-      { id: 4, label: 'Sechzehntel' },
+      { id: 1, label: L.subdivOff },
+      { id: 2, label: L.subdivEighths },
+      { id: 3, label: L.subdivTriplets },
+      { id: 4, label: L.subdivSixteenths },
     ];
-    const subdivLabel = subdivOptions.find((o) => o.id === subdiv)?.label ?? 'Aus';
-    const soundLabels = { click: 'Klick', wood: 'Holzblock', beep: 'Piep' };
+    const subdivLabel = subdivOptions.find((o) => o.id === subdiv)?.label ?? L.subdivOff;
+    const soundLabels = { click: L.soundClick, wood: L.soundWood, beep: L.soundBeep };
 
     const SectionHeader = ({ id, title, value }) => (
       <Pressable
@@ -416,13 +494,13 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.settingsContent}>
           <View style={styles.settingsHeader}>
             <Pressable onPress={() => setScreen('main')} hitSlop={10}>
-              <Text style={[styles.back, { color: c.text }]}>‹ Zurück</Text>
+              <Text style={[styles.back, { color: c.text }]}>{L.back}</Text>
             </Pressable>
-            <Text style={[styles.settingsTitle, { color: c.text }]}>Einstellungen</Text>
+            <Text style={[styles.settingsTitle, { color: c.text }]}>{L.settings}</Text>
             <View style={styles.headerSpacer} />
           </View>
 
-          <SectionHeader id="sig" title="Taktart" value={sigId} />
+          <SectionHeader id="sig" title={L.timeSignature} value={sigId} />
           {openSection === 'sig' && (
             <View style={styles.sectionBody}>
               {SIGNATURES.map((s) => {
@@ -433,7 +511,7 @@ export default function App() {
                       {s.id}
                     </Text>
                     <Text style={[styles.rowName, { color: active ? c.fgText : c.sub }]}>
-                      {s.name}
+                      {L[s.nameKey]}
                     </Text>
                   </OptionRow>
                 );
@@ -441,7 +519,7 @@ export default function App() {
             </View>
           )}
 
-          <SectionHeader id="subdiv" title="Unterteilung" value={subdivLabel} />
+          <SectionHeader id="subdiv" title={L.subdivision} value={subdivLabel} />
           {openSection === 'subdiv' && (
             <View style={styles.sectionBody}>
               {subdivOptions.map((o) => {
@@ -482,7 +560,7 @@ export default function App() {
 
           <SectionHeader
             id="theme"
-            title="Darstellung"
+            title={L.appearance}
             value={themeLabels[themePref]}
           />
           {openSection === 'theme' && (
@@ -502,7 +580,7 @@ export default function App() {
 
           <SectionHeader
             id="display"
-            title="Anzeige"
+            title={L.display}
             value={displayLabels[displayMode]}
           />
           {openSection === 'display' && (
@@ -522,7 +600,7 @@ export default function App() {
 
           <View style={[styles.toggleRow, { borderColor: c.border }]}>
             <Text style={[styles.sectionTitle, { color: c.text }]}>
-              Visueller Akzent
+              {L.visualAccent}
             </Text>
             <Switch
               value={visualAccent}
@@ -533,7 +611,7 @@ export default function App() {
           </View>
 
           <View style={[styles.toggleRow, { borderColor: c.border }]}>
-            <Text style={[styles.sectionTitle, { color: c.text }]}>Vibration</Text>
+            <Text style={[styles.sectionTitle, { color: c.text }]}>{L.vibration}</Text>
             <Switch
               value={hapticsOn}
               onValueChange={setHapticsOn}
@@ -544,22 +622,47 @@ export default function App() {
 
           {hapticsOn && (
             <View style={[styles.sliderRow, { borderColor: c.border }]}>
-              <View style={styles.sliderHeader}>
-                <Text style={[styles.rowName, { color: c.text }]}>Intensität</Text>
-                <Text style={[styles.sectionValue, { color: c.sub }]}>
-                  {['Leicht', 'Mittel', 'Stark'][hapticIntensity - 1]}
-                </Text>
+              <Text style={[styles.rowName, { color: c.text, marginBottom: 10 }]}>
+                {L.intensity}
+              </Text>
+              <View style={styles.segment}>
+                {[
+                  { id: 1, label: L.intensityLight },
+                  { id: 2, label: L.intensityMedium },
+                  { id: 3, label: L.intensityStrong },
+                ].map((o) => {
+                  const active = hapticIntensity === o.id;
+                  return (
+                    <Pressable
+                      key={o.id}
+                      style={[
+                        styles.segmentItem,
+                        { borderColor: c.fg },
+                        active && { backgroundColor: c.fg },
+                      ]}
+                      onPress={() => {
+                        setHapticIntensity(o.id);
+                        Haptics.impactAsync(
+                          [
+                            Haptics.ImpactFeedbackStyle.Light,
+                            Haptics.ImpactFeedbackStyle.Medium,
+                            Haptics.ImpactFeedbackStyle.Heavy,
+                          ][o.id - 1]
+                        ).catch(() => {});
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: active ? c.fgText : c.text,
+                          fontWeight: '600',
+                        }}
+                      >
+                        {o.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-              <Slider
-                minimumValue={1}
-                maximumValue={3}
-                step={1}
-                value={hapticIntensity}
-                onValueChange={(v) => setHapticIntensity(v)}
-                minimumTrackTintColor={c.fg}
-                maximumTrackTintColor={c.border}
-                thumbTintColor={c.fg}
-              />
             </View>
           )}
         </ScrollView>
@@ -611,7 +714,7 @@ export default function App() {
         <Text
           style={[styles.hint, { color: accentActive ? c.fgText : c.sub }]}
         >
-          {running ? 'Tippen zum Stoppen' : 'Tippen zum Starten'}
+          {running ? L.tapToStop : L.tapToStart}
         </Text>
       </Pressable>
 
@@ -859,6 +962,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 4,
+  },
+  segment: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  segmentItem: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: 'center',
   },
   row: {
     flexDirection: 'row',
