@@ -148,6 +148,7 @@ export default function App() {
   const [displayMode, setDisplayMode] = useState('numbers'); // 'numbers' | 'dots'
   const [subdiv, setSubdiv] = useState(1); // 1=aus, 2=Achtel, 3=Triolen, 4=Sechzehntel
   const [sound, setSound] = useState('click'); // 'click' | 'wood' | 'beep'
+  const [visualAccent, setVisualAccent] = useState(false);
   const [hapticsOn, setHapticsOn] = useState(false);
   const [hapticIntensity, setHapticIntensity] = useState(2); // 1=leicht, 2=mittel, 3=stark
   const [openSection, setOpenSection] = useState('sig'); // welche Kategorie aufgeklappt ist
@@ -187,6 +188,7 @@ export default function App() {
           if (typeof s.displayMode === 'string') setDisplayMode(s.displayMode);
           if (typeof s.subdiv === 'number') setSubdiv(s.subdiv);
           if (typeof s.sound === 'string') setSound(s.sound);
+          if (typeof s.visualAccent === 'boolean') setVisualAccent(s.visualAccent);
           if (typeof s.hapticsOn === 'boolean') setHapticsOn(s.hapticsOn);
           if (typeof s.hapticIntensity === 'number') setHapticIntensity(s.hapticIntensity);
         }
@@ -210,11 +212,22 @@ export default function App() {
         displayMode,
         subdiv,
         sound,
+        visualAccent,
         hapticsOn,
         hapticIntensity,
       })
     ).catch(() => {});
-  }, [bpm, sigId, themePref, displayMode, subdiv, sound, hapticsOn, hapticIntensity]);
+  }, [
+    bpm,
+    sigId,
+    themePref,
+    displayMode,
+    subdiv,
+    sound,
+    visualAccent,
+    hapticsOn,
+    hapticIntensity,
+  ]);
 
   const change = (delta) => {
     setBpm((prev) => clampBpm(prev + delta));
@@ -508,6 +521,18 @@ export default function App() {
           )}
 
           <View style={[styles.toggleRow, { borderColor: c.border }]}>
+            <Text style={[styles.sectionTitle, { color: c.text }]}>
+              Visueller Akzent
+            </Text>
+            <Switch
+              value={visualAccent}
+              onValueChange={setVisualAccent}
+              trackColor={{ true: c.fg }}
+              thumbColor="#fff"
+            />
+          </View>
+
+          <View style={[styles.toggleRow, { borderColor: c.border }]}>
             <Text style={[styles.sectionTitle, { color: c.text }]}>Vibration</Text>
             <Switch
               value={hapticsOn}
@@ -544,6 +569,12 @@ export default function App() {
     );
   }
 
+  // Beim betonten Schlag den Anzeigebereich in die Kontrastfarbe flashen
+  // (schwarz im Light-, weiß im Dark-Mode) und Text/Punkte invertieren.
+  const accentActive =
+    visualAccent && running && signature.accents.includes(beat - 1);
+  const displayText = accentActive ? c.fgText : c.text;
+
   return (
     <View
       style={[
@@ -552,7 +583,10 @@ export default function App() {
         { backgroundColor: c.bg },
       ]}
     >
-      <Pressable style={styles.display} onPress={toggle}>
+      <Pressable
+        style={[styles.display, accentActive && { backgroundColor: c.fg }]}
+        onPress={toggle}
+      >
         {displayMode === 'dots' ? (
           <View style={styles.dotsRow}>
             {Array.from({ length: beatsPerBar }).map((_, i) => {
@@ -564,17 +598,19 @@ export default function App() {
                   style={[
                     styles.dot,
                     isAccent && styles.dotAccent,
-                    { borderColor: c.text },
-                    filled && { backgroundColor: c.text },
+                    { borderColor: displayText },
+                    filled && { backgroundColor: displayText },
                   ]}
                 />
               );
             })}
           </View>
         ) : (
-          <Text style={[styles.beat, { color: c.text }]}>{beat}</Text>
+          <Text style={[styles.beat, { color: displayText }]}>{beat}</Text>
         )}
-        <Text style={[styles.hint, { color: c.sub }]}>
+        <Text
+          style={[styles.hint, { color: accentActive ? c.fgText : c.sub }]}
+        >
           {running ? 'Tippen zum Stoppen' : 'Tippen zum Starten'}
         </Text>
       </Pressable>
