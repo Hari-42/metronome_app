@@ -665,6 +665,15 @@ export default function App() {
               </View>
             </View>
           )}
+
+          <View style={styles.credits}>
+            <Text style={[styles.creditsText, { color: c.sub }]}>
+              © {new Date().getFullYear()} Harisaran Mohanathas
+            </Text>
+            <Text style={[styles.creditsText, { color: c.sub }]}>
+              Made by Harisaran Mohanathas
+            </Text>
+          </View>
         </ScrollView>
 
         <StatusBar style={effectiveTheme === 'dark' ? 'light' : 'dark'} />
@@ -767,6 +776,10 @@ export default function App() {
           <Text style={[styles.settingsIcon, { color: c.text }]}>⚙</Text>
         </Pressable>
       </View>
+
+      <Text style={[styles.madeBy, { color: c.sub }]} pointerEvents="none">
+        Made by Hari
+      </Text>
 
       <StatusBar style={effectiveTheme === 'dark' ? 'light' : 'dark'} />
     </View>
@@ -875,6 +888,15 @@ const styles = StyleSheet.create({
     right: 12,
     padding: 8,
   },
+  madeBy: {
+    position: 'absolute',
+    bottom: 6,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 11,
+    opacity: 0.7,
+  },
   settingsIcon: {
     fontSize: 26,
     color: '#222',
@@ -966,6 +988,14 @@ const styles = StyleSheet.create({
   segment: {
     flexDirection: 'row',
     gap: 8,
+  },
+  credits: {
+    marginTop: 28,
+    alignItems: 'center',
+  },
+  creditsText: {
+    fontSize: 13,
+    marginBottom: 2,
   },
   segmentItem: {
     flex: 1,
